@@ -1,0 +1,79 @@
+---
+version: 1
+
+kind: experiment
+
+framework: pytorch
+
+declarations:
+  env: "LunarLanderContinuous-v2"
+  agent: 'WorldModelPPO'
+  random_seed: 10000
+  max_episodes: 10000000
+  max_episode_len: 30000
+  random_episodes: 10000
+  render_env: false
+  use_monitor: false
+  log_dir: 'polyaxon'
+# Agent args
+#  parser.add_argument('--lr', help='actor network learning rate', default=0.0001, type=float)
+#  parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
+#  parser.add_argument('--k-size', help='size of update memory', default=300, type=int)
+#  parser.add_argument('--action-std', help='standard deviation of action output signal', default=0.6, type=float)
+#  parser.add_argument('--epochs', help='epochs to update per step', default=5, type=int)
+#  parser.add_argument('--epsilon')
+#  parser.add_argument('--model-dir', help='directory for storing gym results', default='./saved_models')
+#  parser.add_argument('--cuda', help='Enable gpu optimization', action='store_true')
+  lr: 0.0005
+  gamma: 0.99
+  k_size: 8000
+  action_std: 0.6
+  epochs: 10
+  latent: 128
+  epsilon: 0.3
+  model_dir: 'polyaxon'
+  cuda: 'True'
+  lam: 0.99
+
+
+build:
+  image: pytorch/pytorch:nightly-runtime-cuda9.2-cudnn7
+  build_steps:
+    - pip install PyYAML --ignore-installed
+    - pip install polyaxon_helper
+    - pip install polyaxon_client
+    - pip install cloudpickle
+    - pip install gym
+    - pip install pybullet
+    - pip install tensorboardX
+    - apt-get update -y
+    - apt-get install ffmpeg -y
+    - apt install -y python3-dev zlib1g-dev libjpeg-dev cmake swig python-pyglet python3-opengl libboost-all-dev libsdl2-dev libosmesa6-dev patchelf ffmpeg xvfb
+    - pip install gym[box2d]
+environment:
+  resources:
+    gpu:
+      requests: 1
+      limits: 1
+
+run:
+  cmd: python -u train.py {{ "--render-env" if render_env == true}} \
+                          {{ "--use-monitor" if use_monitor == true}}\
+                          {{ "--cuda" if cuda == 'True'}}\
+                          --env={{ env }}\
+                          --agent={{ agent }}\
+                          --random-seed={{ random_seed }}\
+                          --max-episodes={{ max_episodes }}\
+                          --max-episode-len={{ max_episode_len }}\
+                          --random-episodes={{ random_episodes }}\
+                          --log-dir={{ log_dir }}\
+                          --lr={{ lr }}\
+                          --gamma={{ gamma }}\
+                          --k-size={{ k_size }}\
+                          --epsilon={{ epsilon }}\
+                          --epochs={{ epochs }}\
+                          --action-std={{ action_std }}\
+                          --model-dir={{ model_dir }}\
+                          --latent={{ latent }}
+                          --monitor-dir=polyaxon
+                          --lam={{ lam }}
