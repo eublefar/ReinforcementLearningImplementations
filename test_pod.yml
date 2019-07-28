@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod
+spec:
+  containers:
+    - image: 127.0.0.1:32500/pg_rl:latest
+      imagePullPolicy: Always
+      name: my-test-pod
+      resources:
+        limits:
+          nvidia.com/gpu: 1 # requesting 1 GPU
+      command:
+      - /bin/bash
+  nodeSelector:
+    kubernetes.io/hostname: dn06

@@ -1,0 +1,71 @@
+---
+version: 1
+
+kind: experiment
+
+framework: pytorch
+
+declarations:
+  env: "LunarLanderContinuous-v2"
+  agent: 'DDPGAgent'
+  random_seed: 14
+  max_episodes: 10000000
+  max_episode_len: 10000000
+  random_episode_num: 64
+  render_env: false
+  use_monitor: false
+  log_dir: 'polyaxon'
+# Agent args
+  actor_lr: 0.0001
+  critic_lr: 0.0001
+  gamma: 0.99
+  tau: 0.0001
+  buffer_size: 1000000
+  minibatch_size: 128
+  model_dir: 'polyaxon'
+  cuda: 'True'
+
+build:
+  image: pytorch/pytorch:nightly-runtime-cuda9.2-cudnn7
+  build_steps:
+    - pip install PyYAML --ignore-installed
+    - pip install polyaxon_helper
+    - pip install polyaxon_client
+    - pip install cloudpickle
+    - pip install gym
+    - pip install pybullet
+    - pip install tensorboardX
+    - apt-get update -y
+    - apt install -y python3-dev zlib1g-dev libjpeg-dev cmake swig python-pyglet python3-opengl libboost-all-dev libsdl2-dev libosmesa6-dev patchelf ffmpeg xvfb
+    - pip install gym[box2d]
+    - apt-get install ffmpeg -y
+    - apt-get install xvfb -y
+
+environment:
+  resources:
+    gpu:
+      requests: 1
+      limits: 1
+  node_selector:
+    kubernetes.io/hostname: dn06
+
+run:
+  cmd: python -u train.py {{ "--render-env" if render_env == true}} \
+                          {{ "--use-monitor" if use_monitor == true}}\
+                          {{ "--cuda" if cuda == 'True'}}\
+                          --env={{ env }}\
+                          --agent={{ agent }}\
+                          --random-seed={{ random_seed }}\
+                          --max-episodes={{ max_episodes }}\
+                          --max-episode-len={{ max_episode_len }}\
+                          --random-episodes-num={{ random_episode_num }}\
+                          --log-dir={{ log_dir }}\
+                          --actor-lr={{ actor_lr }}\
+                          --critic-lr={{ critic_lr }}
+                          --log-dir={{ log_dir }}\
+                          --gamma={{ gamma }}\
+                          --tau={{ tau }}\
+                          --buffer-size={{ buffer_size }}\
+                          --minibatch-size={{ minibatch_size }}\
+                          --model-dir={{ model_dir }}\
+                          --monitor-dir=polyaxon
