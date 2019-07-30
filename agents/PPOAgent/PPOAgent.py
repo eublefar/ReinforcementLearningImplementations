@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from policies.ActorCriticPolicy import ActorCritic
 from pathlib import Path
 import os
-
+import importlib
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # TODO:
@@ -23,11 +23,14 @@ class Episode:
         self.rewards = []
 
 
-class PPOAgent_bootstrap:
+class PPOAgent:
     def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
+
         self.summary_writer = summary_writer
+
         parser = ArgumentParser(description='Deep Deterministic Policy Gradient')
         parser.add_argument('--dkl-penalty', help='Use penalty instead of surrogate objective clipping', action='store_true')
+        parser.add_argument('--sampler', help='Sampler class name to use for exploration and learning', type=str)
         parser.add_argument('--lr', help='actor network learning rate', default=0.0001, type=float)
         parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
         parser.add_argument('--batch-size', help='size of update memory', default=100, type=int)
@@ -57,6 +60,10 @@ class PPOAgent_bootstrap:
 
         self.action_scale = action_space.high[0]
 
+        self.policy_sampler = agent_class = getattr(
+            importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
+            self.args.sampler)
+
         self.policy = ActorCritic(self.state_dim, self.action_dim, self.args.latent, self.args.action_std).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(),
                                           lr=self.args.lr,)
@@ -70,12 +77,13 @@ class PPOAgent_bootstrap:
     def act(self, state, episode):
         self.policy_old.eval()
         state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        action, prob = self.policy_old.act(state)
+        action = self.policy_old.act(state)
+        action_sampled, logprob = self.policy_sampler.sample_action(action)
         self.memory[-1].states.append(state)
-        self.memory[-1].logprobs.append(prob)
-        self.memory[-1].actions.append(action)
+        self.memory[-1].logprobs.append(logprob)
+        self.memory[-1].actions.append(action_sampled)
         self.policy_old.train()
-        return action.cpu().data.numpy().flatten() * self.action_scale
+        return action_sampled.cpu().data.numpy().flatten() * self.action_scale
 
     def memorize(self, s, a, r, terminal, s_prim):
         self.memory[-1].rewards.append(r)
