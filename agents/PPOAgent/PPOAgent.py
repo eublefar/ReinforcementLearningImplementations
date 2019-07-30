@@ -1,7 +1,5 @@
 from torch import nn
 import torch
-from torch.distributions import MultivariateNormal
-import numpy as np
 from argparse import ArgumentParser
 from policies.ActorCriticPolicy import ActorCritic
 from pathlib import Path
@@ -62,7 +60,7 @@ class PPOAgent:
 
         self.policy_sampler = agent_class = getattr(
             importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
-            self.args.sampler)
+            self.args.sampler) (args_for_parse)
 
         self.policy = ActorCritic(self.state_dim, self.action_dim, self.args.latent, self.args.action_std).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(),
@@ -167,7 +165,11 @@ class PPOAgent:
         return e
 
     def learn_episode(self, episode):
-        logprobs, state_values, entropy = self.policy.evaluate(episode.states, episode.actions)
+
+        state_values, new_actions = self.policy.evaluate(episode.states)
+        logprobs = self.policy_sampler.get_logprobs(actions=new_actions, sampled_actions=episode.actions)
+        entropy = self.policy_sampler.get_entropy(new_actions)
+
         next_state_values = torch.cat((state_values[1:], torch.zeros(1).to(device)))
         targets = episode.returns
         td_residuals = episode.rewards + next_state_values * self.args.gamma - state_values
