@@ -32,7 +32,6 @@ class PPOAgent:
         parser.add_argument('--lr', help='actor network learning rate', default=0.0001, type=float)
         parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
         parser.add_argument('--batch-size', help='size of update memory', default=100, type=int)
-        parser.add_argument('--action-std', help='standard deviation of action output signal', default=0.6, type=float)
         parser.add_argument('--epochs', help='epochs to update per step', default=5, type=int)
         parser.add_argument('--latent', help='Size of a hidden layers', default=64, type=int)
         parser.add_argument('--epsilon', help='clip objective threshold', default=0.2, type=float)
@@ -58,7 +57,7 @@ class PPOAgent:
 
         self.action_scale = action_space.high[0]
 
-        self.policy_sampler = agent_class = getattr(
+        self.policy_sampler = getattr(
             importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
             self.args.sampler) (args_for_parse)
 
@@ -71,6 +70,11 @@ class PPOAgent:
         self.step = 0
         self.memory = [Episode()]
         self.new_episode = False
+
+        # Variables used for logging
+        self.total_actor_loss = 0
+        self.total_critic_loss = 0
+        self.total_entropy_loss = 0
 
     def act(self, state, episode):
         self.policy_old.eval()
@@ -99,50 +103,50 @@ class PPOAgent:
     def update(self, episode=0):
         if self.new_episode:
             if episode % self.args.batch_size == 0 and episode:
+                self.memory = [self.process_episode(e) for e in self.memory]
                 self.fit_batch(episode)
                 self.memory = []
             self.memory.append(Episode())
             self.new_episode = False
 
     def fit_batch(self, ep):
-        m = []
-        for e in self.memory:
-            e = self.process_episode(e)
-            m.append(e)
-        self.memory = m
-
         for epoch in range(self.args.epochs):
-            total_actor_loss = 0
-            total_critic_loss = 0
-            total_entropy_loss = 0
+            self.total_actor_loss = 0
+            self.total_critic_loss = 0
+            self.total_entropy_loss = 0
             for i, episode in enumerate(self.memory):
                 actor_loss, critic_loss, entropy_loss = self.learn_episode(episode)
-                total_actor_loss += actor_loss
-                total_critic_loss += critic_loss
-                total_entropy_loss += entropy_loss
-            loss = (total_actor_loss
-                    + total_critic_loss * self.critic_update_weight
-                    + total_entropy_loss * self.entropy_update_weight)
+                self.total_actor_loss += actor_loss
+                self.total_critic_loss += critic_loss
+                self.total_entropy_loss += entropy_loss
+            loss = (self.total_actor_loss
+                    + self.total_critic_loss * self.critic_update_weight
+                    + self.total_entropy_loss * self.entropy_update_weight)
             loss /= len(self.memory)
 
             self.optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm(self.policy.critic.parameters(), 40)
             self.optimizer.step()
-
-            self.summary_writer.add_scalar('totall_loss', loss.item(), global_step=ep + epoch)
-            self.summary_writer.add_scalar('critic_loss', total_critic_loss.item()/len(self.memory), global_step=ep + epoch)
-            self.summary_writer.add_scalar('actor_loss', total_actor_loss.item()/len(self.memory), global_step=ep + epoch)
-            self.summary_writer.add_scalar('entropy_loss', total_entropy_loss.item()/len(self.memory), global_step=ep + epoch)
-            self.summary_writer.add_scalar('critic_gradient_norm',
-                                           sum([p.grad.data.norm(2) ** 2 for p in self.policy.critic.parameters()]) ** (
-                                                       1. / 2), global_step=ep + epoch)
-            self.summary_writer.add_scalar('actor_gradient_norm',
-                                           sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()]) ** (
-                                                       1. / 2), global_step=ep + epoch)
-            self.summary_writer.add_histogram('action_var', self.policy.action_var, global_step=ep + epoch)
-
+            self.add_summary(ep + epoch * len(self.memory))
         self.policy_old.load_state_dict(self.policy.state_dict())
+
+    def add_summary(self, step):
+        self.summary_writer.add_scalar('totall_loss', (self.total_actor_loss
+                                                       + self.total_critic_loss * self.critic_update_weight
+                                                       + self.total_entropy_loss * self.entropy_update_weight),
+                                       global_step=step)
+        self.summary_writer.add_scalar('critic_loss', self.total_critic_loss.item()/len(self.memory), global_step=step)
+        self.summary_writer.add_scalar('actor_loss', self.total_actor_loss.item()/len(self.memory), global_step=step)
+        self.summary_writer.add_scalar('entropy_loss', self.total_entropy_loss.item()/len(self.memory), global_step=step)
+        self.summary_writer.add_scalar('critic_gradient_norm',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.critic.parameters()]) ** (
+                                                   1. / 2), global_step=step)
+        self.summary_writer.add_scalar('actor_gradient_norm',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()]) ** (
+                                                   1. / 2), global_step=step)
+        # TODO: add some way to poll variances from policy_sampler.
+        # self.summary_writer.add_histogram('action_var', self.policy.action_var, global_step=step)
 
     def process_episode(self, e):
         lambdas = [self.args.lam ** i for i in range(len(e.rewards))]
