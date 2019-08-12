@@ -1,30 +1,29 @@
 from torch import nn
 import torch
-from torch.distributions import MultivariateNormal
+import policies.critics
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim, n_var):
+    def __init__(self, state_dim, action_dim, actor_hidden_units=[128, 128],
+                 critic_hidden_units=[128, 128], critic='StateValueCritic'):
         super(ActorCritic, self).__init__()
-        # action mean range -1 to 1
+        self.critic_name = critic
+        actor_intermediary_layers = []
+        for hidden_last, hidden in zip(actor_hidden_units[:-1], actor_hidden_units[1:]):
+            actor_intermediary_layers.append(nn.Linear(hidden_last, hidden))
+            actor_intermediary_layers.append(nn.LeakyReLU(inplace=True))
+
         self.actor = nn.Sequential(
-            nn.Linear(state_dim, n_var),
+            nn.Linear(state_dim, actor_hidden_units[0]),
             nn.LeakyReLU(inplace=True),
-            nn.Linear(n_var, n_var),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(n_var, action_dim),
+            *actor_intermediary_layers,
+            nn.Linear(actor_hidden_units[-1], action_dim),
             nn.Tanh()
         )
-        # critic
-        self.critic = nn.Sequential(
-            nn.Linear(state_dim, n_var),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(n_var, n_var),
-            nn.LeakyReLU(inplace=True),
-            nn.Linear(n_var, 1)
-        )
+
+        self.critic = getattr(policies.critics, critic)(state_dim, action_dim, critic_hidden_units)
 
     def forward(self):
         raise NotImplementedError
@@ -32,8 +31,14 @@ class ActorCritic(nn.Module):
     def act(self, state):
         return self.actor(state)
 
+    def predict(self, *args):
+        return self.critic(*args)
+
     def evaluate(self, state):
         new_actions = self.actor(state)
-        state_value = self.critic(state)
+        if self.critic_name == 'StateValueCritic':
+            state_value = self.critic(state)
+        else:
+            state_value = self.critic(state, new_actions)
 
         return torch.squeeze(state_value), new_actions

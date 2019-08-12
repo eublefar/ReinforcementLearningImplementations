@@ -10,6 +10,7 @@ class GaussianSampler:
         parser.add_argument('--std', 'standard deviation of a gaussian for policy sampling', type=float)
         self.args = parser.parse_known_args(args_for_parse)
         self.std = self.args.std
+        self.action_shape = None
 
     def sample_action(self, actions):
         action_var = torch.full(actions.shape[1:], self.std * self.std).to(device)
@@ -28,3 +29,6 @@ class GaussianSampler:
         action_var = torch.full(action_means.shape[1:], self.std * self.std).to(device)
         dist = torch.distributions.MultivariateNormal(action_means, torch.diag(torch.abs(action_var)))
         return dist.log_prob(sampled_actions)
+
+    def get_variances(self, actions):
+        return torch.full(actions.shape[1:], self.std * self.std).to(device)
