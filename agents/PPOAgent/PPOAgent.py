@@ -5,10 +5,11 @@ from policies.ActorCriticPolicy import ActorCritic
 from pathlib import Path
 import os
 import importlib
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+
 # TODO:
-#  - Add logging of everything + animations for functions over time
 #  - Add common buffer class with samplers
 #  - Add module superclass that will parse parameters it needs
 
@@ -21,19 +22,29 @@ class Episode:
         self.rewards = []
 
 
+def build_triangle_matrix(v):
+    tri = torch.zeros((len(v), len(v)))
+    for i in range(len(v)):
+        tri[i, i:] = v
+        v = v[:-1]
+    return tri
+
+
 class PPOAgent:
     def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
 
         self.summary_writer = summary_writer
 
         parser = ArgumentParser(description='Deep Deterministic Policy Gradient')
-        parser.add_argument('--dkl-penalty', help='Use penalty instead of surrogate objective clipping', action='store_true')
+        parser.add_argument('--dkl-penalty', help='Use penalty instead of surrogate objective clipping',
+                            action='store_true')
         parser.add_argument('--sampler', help='Sampler class name to use for exploration and learning', type=str)
         parser.add_argument('--lr', help='actor network learning rate', default=0.0001, type=float)
         parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
         parser.add_argument('--batch-size', help='size of update memory', default=100, type=int)
         parser.add_argument('--epochs', help='epochs to update per step', default=5, type=int)
-        parser.add_argument('--latent', help='Size of a hidden layers', default=64, type=int)
+        parser.add_argument('--actor_hidden_units', help='Size of a hidden layers', default=[128], nargs='+', type=int)
+        parser.add_argument('--critic_hidden_units', help='Size of a hidden layers', default=[128], nargs='+', type=int)
         parser.add_argument('--epsilon', help='clip objective threshold', default=0.2, type=float)
         parser.add_argument('--lam', help='Gae lambda parameter', default=0.5, type=float)
         parser.add_argument('--model-dir', help='directory for storing gym results', default='./saved_models')
@@ -42,7 +53,7 @@ class PPOAgent:
         self.args, _ = parser.parse_known_args(args_for_parse)
         print(f'Parsed model parameters {self.args}')
 
-        if self.args.model_dir == 'polyaxon' :
+        if self.args.model_dir == 'polyaxon':
             from polyaxon_helper import get_outputs_path
             self.args.model_dir = get_outputs_path()
 
@@ -59,12 +70,14 @@ class PPOAgent:
 
         self.policy_sampler = getattr(
             importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
-            self.args.sampler) (args_for_parse)
+            self.args.sampler)(args_for_parse)
 
-        self.policy = ActorCritic(self.state_dim, self.action_dim, self.args.latent, self.args.action_std).to(device)
-        self.optimizer = torch.optim.Adam(self.policy.parameters(),
-                                          lr=self.args.lr,)
-        self.policy_old = ActorCritic(self.state_dim, self.action_dim, self.args.latent, self.args.action_std).to(device)
+        self.policy = ActorCritic(self.state_dim, self.action_dim,
+                                  self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
+        self.policy_old = ActorCritic(self.state_dim, self.action_dim,
+                                      self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
+
+        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.args.lr)
         self.loss = nn.MSELoss(reduce=False)
 
         self.step = 0
@@ -93,13 +106,6 @@ class PPOAgent:
             # self.memory[-1].states.append(torch.FloatTensor(s_prim.reshape(1, -1)).to(device))
             self.new_episode = True
 
-    def build_triangle_matrix(self, v):
-        tri = torch.zeros((len(v), len(v)))
-        for i in range(len(v)):
-            tri[i, i:] = v
-            v = v[:-1]
-        return tri
-
     def update(self, episode=0):
         if self.new_episode:
             if episode % self.args.batch_size == 0 and episode:
@@ -114,11 +120,15 @@ class PPOAgent:
             self.total_actor_loss = 0
             self.total_critic_loss = 0
             self.total_entropy_loss = 0
+            self.last_variance = None
             for i, episode in enumerate(self.memory):
-                actor_loss, critic_loss, entropy_loss = self.learn_episode(episode)
+                actor_loss, critic_loss, entropy_loss, last_variance = self.learn_episode(episode)
                 self.total_actor_loss += actor_loss
                 self.total_critic_loss += critic_loss
                 self.total_entropy_loss += entropy_loss
+                self.last_variance = self.last_variance + last_variance.mean() if self.last_variance is not None \
+                    else last_variance.mean()
+
             loss = (self.total_actor_loss
                     + self.total_critic_loss * self.critic_update_weight
                     + self.total_entropy_loss * self.entropy_update_weight)
@@ -128,7 +138,9 @@ class PPOAgent:
             loss.backward()
             torch.nn.utils.clip_grad_norm(self.policy.critic.parameters(), 40)
             self.optimizer.step()
-            self.add_summary(ep + epoch * len(self.memory))
+
+            self.last_variance /= len(self.memory)
+            self.add_summary(epoch * len(self.memory))
         self.policy_old.load_state_dict(self.policy.state_dict())
 
     def add_summary(self, step):
@@ -136,17 +148,19 @@ class PPOAgent:
                                                        + self.total_critic_loss * self.critic_update_weight
                                                        + self.total_entropy_loss * self.entropy_update_weight),
                                        global_step=step)
-        self.summary_writer.add_scalar('critic_loss', self.total_critic_loss.item()/len(self.memory), global_step=step)
-        self.summary_writer.add_scalar('actor_loss', self.total_actor_loss.item()/len(self.memory), global_step=step)
-        self.summary_writer.add_scalar('entropy_loss', self.total_entropy_loss.item()/len(self.memory), global_step=step)
+        self.summary_writer.add_scalar('critic_loss', self.total_critic_loss.item() / len(self.memory),
+                                       global_step=step)
+        self.summary_writer.add_scalar('actor_loss', self.total_actor_loss.item() / len(self.memory), global_step=step)
+        self.summary_writer.add_scalar('entropy_loss', self.total_entropy_loss.item() / len(self.memory),
+                                       global_step=step)
         self.summary_writer.add_scalar('critic_gradient_norm',
                                        sum([p.grad.data.norm(2) ** 2 for p in self.policy.critic.parameters()]) ** (
-                                                   1. / 2), global_step=step)
+                                               1. / 2), global_step=step)
         self.summary_writer.add_scalar('actor_gradient_norm',
                                        sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()]) ** (
-                                                   1. / 2), global_step=step)
-        # TODO: add some way to poll variances from policy_sampler.
-        # self.summary_writer.add_histogram('action_var', self.policy.action_var, global_step=step)
+                                               1. / 2), global_step=step)
+
+        self.summary_writer.add_histogram('action_var', self.last_variance, global_step=step)
 
     def process_episode(self, e):
         lambdas = [self.args.lam ** i for i in range(len(e.rewards))]
@@ -154,8 +168,8 @@ class PPOAgent:
         lambdas = torch.FloatTensor(lambdas)
         gammas = torch.FloatTensor(gammas)
         coefs = gammas * lambdas
-        coefs_tri = self.build_triangle_matrix(coefs).to(device)
-        gammas_tri = self.build_triangle_matrix(gammas).to(device)
+        coefs_tri = build_triangle_matrix(coefs).to(device)
+        gammas_tri = build_triangle_matrix(gammas).to(device)
 
         e.coefs = coefs_tri
 
@@ -169,10 +183,10 @@ class PPOAgent:
         return e
 
     def learn_episode(self, episode):
-
         state_values, new_actions = self.policy.evaluate(episode.states)
         logprobs = self.policy_sampler.get_logprobs(actions=new_actions, sampled_actions=episode.actions)
         entropy = self.policy_sampler.get_entropy(new_actions)
+        last_variances = self.policy_sampler.get_variances(new_actions)
 
         next_state_values = torch.cat((state_values[1:], torch.zeros(1).to(device)))
         targets = episode.returns
@@ -189,7 +203,8 @@ class PPOAgent:
         actor_loss = - (torch.min(surrogate, surrogate_clipped)).mean()
         critic_loss = (0.5 * td_residuals + 0.5 * self.loss(targets, state_values)).mean()
         entropy_loss = - entropy.mean()
-        return actor_loss, critic_loss, entropy_loss
+
+        return actor_loss, critic_loss, entropy_loss, last_variances
 
     def save(self, identity):
         path = Path(f'{self.args.model_dir}/{identity}')
@@ -197,5 +212,3 @@ class PPOAgent:
             os.system(f'rm -rf {path}')
         path.mkdir(parents=True)
         torch.save(self.policy.state_dict(), f'{str(path)}/actor')
-
-

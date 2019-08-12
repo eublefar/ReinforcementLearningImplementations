@@ -36,10 +36,12 @@ class AdaptiveGaussianSampler:
         return dist.entropy()
 
     def get_logprobs(self, actions, sampled_actions):
-
         action_var = actions[:, len(actions.shape[1]) // 2:]
         action_mean = actions[:, :len(actions.shape[1]) // 2]
 
         dist = torch.distributions.MultivariateNormal(action_mean, matrix_diag(action_var))
 
         return dist.log_prob(sampled_actions)
+
+    def get_variances(self, actions):
+        return actions[:, len(actions.shape[1]) // 2:]

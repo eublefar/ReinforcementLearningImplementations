@@ -28,14 +28,15 @@ class OrnsteinUhlenbeckSampler:
     # TODO: Implement stepping per batch sample and calculating logprobs with multiple x's
     def sample_action(self, actions):
         n_steps = actions.shape[0]
-        x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + \
-            self.sigma * np.sqrt(self.dt) * np.random.normal(size=actions.shape[1:])
-        actions += x[:, None]
+        for step in n_steps:
+            x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + \
+                self.sigma * np.sqrt(self.dt) * np.random.normal(size=actions.shape[1:])
+            actions[step, :] += x
+            self.x_prev = x
         logprobs = torch.distributions.MultivariateNormal(self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt,
                                                           torch.diag(torch.abs(
                                                               self.sigma * np.sqrt(self.dt) * np.ones(actions.shape[1:])
                                                           ))).log_prob(x)
-        self.x_prev = x
         return actions, logprobs
 
     def get_entropy(self, actions):
@@ -56,6 +57,9 @@ class OrnsteinUhlenbeckSampler:
                                                               action_means.shape[1:])
                                                       )))
         return dist.log_prob(sampled_actions)
+
+    def get_variances(self, actions):
+        raise NotImplementedError
 
     def __repr__(self):
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
