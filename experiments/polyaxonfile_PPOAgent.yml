@@ -7,8 +7,8 @@ framework: pytorch
 
 declarations:
   env: "Pendulum-v0"
-  agent: 'PPOAgent_bootstrap'
-  agent_module: 'agents.PPOAgent.PPOAgent_bootstrap'
+  agent: 'PPOAgent'
+  agent_module: 'agents.PPOAgent.PPOAgent'
   random_seed: 10000
   max_episodes: 10000000
   max_episode_len: 300
