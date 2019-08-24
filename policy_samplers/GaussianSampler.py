@@ -1,14 +1,14 @@
 import torch
 from argparse import ArgumentParser
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 class GaussianSampler:
 
     def __init__(self, args_for_parse):
         parser = ArgumentParser(description='gaussian sampler')
-        parser.add_argument('--std', 'standard deviation of a gaussian for policy sampling', type=float)
-        self.args = parser.parse_known_args(args_for_parse)
+        parser.add_argument('--std', help='standard deviation of a gaussian for policy sampling', type=float)
+        self.args, _ = parser.parse_known_args(args_for_parse)
         self.std = self.args.std
         self.action_shape = None
 
