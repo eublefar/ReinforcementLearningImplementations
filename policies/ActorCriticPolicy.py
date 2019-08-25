@@ -1,7 +1,7 @@
 from torch import nn
 import torch
 import policies.critics
-
+import logging
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -35,7 +35,10 @@ class ActorCritic(nn.Module):
         return self.critic(*args)
 
     def evaluate(self, state):
+        logging.info('evaluating state {}'.format(state))
+
         new_actions = self.actor(state)
         state_value = self.critic(state, new_actions)
 
+        logging.info('state_value {}'.format(state_value))
         return torch.squeeze(state_value), new_actions
