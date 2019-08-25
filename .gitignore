@@ -2,3 +2,5 @@
 .polyaxonignore
 .ipynb_checkpoints
 results
+.idea
+*__*
