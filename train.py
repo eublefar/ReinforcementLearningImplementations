@@ -5,7 +5,7 @@ import pybullet_envs
 import torch
 from gym import wrappers, logger
 from sys import argv
-
+import logging
 
 import importlib
 
@@ -96,7 +96,8 @@ def step_policy(env, agent, last_ob, episode_num):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=None)
-
+    logger = logging.getLogger('global')
+    logger.setLevel(logging.INFO)
     # run parameters
 
     parser.add_argument('--use-monitor', help='record gym results', action='store_true')

@@ -35,6 +35,7 @@ declarations:
   model_dir: 'polyaxon'
   cuda: 'True'
   lam: 0.95
+  sampler: 'AdaptiveGaussianSampler'
 
 
 build:
@@ -83,3 +84,4 @@ run:
                           --latent={{ latent }}
                           --monitor-dir=polyaxon
                           --lam={{ lam }}
+                          --sampler={{ sampler }}
