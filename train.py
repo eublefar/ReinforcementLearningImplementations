@@ -13,7 +13,6 @@ from tensorboardX import SummaryWriter
 
 
 def main(args):
-    logger.set_level(logger.INFO)
     kwargs = {}
     if args.render_env:
         kwargs['render'] = args.render_env
@@ -43,10 +42,11 @@ def main(args):
 
 def train(args, agent, writer, env):
     # random loop
+    logging.info('Running random episodes {} times'.format(args.random_episodes))
     for i in range(args.random_episodes):
         ob = env.reset()
         for _ in range(args.max_episode_len):
-            ob, reward, done = step_random(env, agent, ob)
+            ob, reward, done = step_random(env, agent, ob, episode_num=i)
             if done:
                 break
 
@@ -72,7 +72,7 @@ def train(args, agent, writer, env):
         writer.add_scalar("reward", reward_per_ep, global_step=i)
         writer.add_scalar("avg_legth", ep_step, global_step=i)
 
-        if i % args.checkpoint_episodes:
+        if i % args.checkpoint_episodes == 0:
             agent.save('checkpoint_{}'.format(i))
 
     writer.close()
@@ -96,8 +96,7 @@ def step_policy(env, agent, last_ob, episode_num):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=None)
-    logger = logging.getLogger('global')
-    logger.setLevel(logging.INFO)
+    logging.basicConfig(level = logging.ERROR)
     # run parameters
 
     parser.add_argument('--use-monitor', help='record gym results', action='store_true')
