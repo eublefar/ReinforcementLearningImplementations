@@ -35,7 +35,7 @@ class PPOAgent:
 
         self.summary_writer = summary_writer
 
-        parser = ArgumentParser(description='Deep Deterministic Policy Gradient')
+        parser = ArgumentParser(description='PPO')
         parser.add_argument('--dkl-penalty', help='Use penalty instead of surrogate objective clipping',
                             action='store_true')
         parser.add_argument('--sampler', help='Sampler class name to use for exploration and learning', type=str)
@@ -72,9 +72,11 @@ class PPOAgent:
             importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
             self.args.sampler)(args_for_parse)
 
-        self.policy = ActorCritic(self.state_dim, self.action_dim,
+        self.policy = ActorCritic(self.state_dim,
+                                  self.policy_sampler.get_layer_size_before_sample(self.action_dim),
                                   self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
-        self.policy_old = ActorCritic(self.state_dim, self.action_dim,
+        self.policy_old = ActorCritic(self.state_dim,
+                                      self.policy_sampler.get_layer_size_before_sample(self.action_dim),
                                       self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
 
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.args.lr)

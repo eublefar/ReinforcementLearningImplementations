@@ -1,9 +1,13 @@
 import torch
+from .base_sampler import BaseSampler
 from argparse import ArgumentParser
+import logging
+
+
 device = torch.device("cpu")
 
 
-class GaussianSampler:
+class GaussianSampler(BaseSampler):
 
     def __init__(self, args_for_parse):
         parser = ArgumentParser(description='gaussian sampler')
@@ -17,7 +21,6 @@ class GaussianSampler:
         dist = torch.distributions.MultivariateNormal(actions, torch.diag(torch.abs(action_var)))
         action = dist.sample()
         action_logprobs = dist.log_prob(action)
-
         return actions, action_logprobs
 
     def get_entropy(self, actions):
@@ -28,6 +31,7 @@ class GaussianSampler:
     def get_logprobs(self, action_means, sampled_actions):
         action_var = torch.full(action_means.shape[1:], self.std * self.std).to(device)
         dist = torch.distributions.MultivariateNormal(action_means, torch.diag(torch.abs(action_var)))
+
         return dist.log_prob(sampled_actions)
 
     def get_variances(self, actions):

@@ -36,9 +36,6 @@ class ActorCritic(nn.Module):
 
     def evaluate(self, state):
         new_actions = self.actor(state)
-        if self.critic_name == 'StateValueCritic':
-            state_value = self.critic(state)
-        else:
-            state_value = self.critic(state, new_actions)
+        state_value = self.critic(state, new_actions)
 
         return torch.squeeze(state_value), new_actions

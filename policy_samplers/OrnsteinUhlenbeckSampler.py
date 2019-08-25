@@ -3,11 +3,11 @@
 import numpy as np
 import torch
 from argparse import ArgumentParser
-
+from .base_sampler import BaseSampler
 device = torch.device("cpu")
 
 
-class OrnsteinUhlenbeckSampler:
+class OrnsteinUhlenbeckSampler(BaseSampler):
 
     # def __init__(self, mu, sigma=0.2, theta=.15, dt=1e-2, x0=None):
     def __init__(self, args_for_parse=[], x0=None):
