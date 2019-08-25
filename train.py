@@ -13,7 +13,6 @@ from tensorboardX import SummaryWriter
 
 
 def main(args):
-    logger.set_level(logger.INFO)
     kwargs = {}
     if args.render_env:
         kwargs['render'] = args.render_env
