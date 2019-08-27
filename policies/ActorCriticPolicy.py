@@ -7,9 +7,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class ActorCritic(nn.Module):
     def __init__(self, state_dim, action_dim, actor_hidden_units=[128, 128],
-                 critic_hidden_units=[128, 128], critic='StateValueCritic'):
+                 critic_hidden_units=[128, 128], critic_name='StateValueCritic'):
         super(ActorCritic, self).__init__()
-        self.critic_name = critic
+        self.critic_name = critic_name
         actor_intermediary_layers = []
         for hidden_last, hidden in zip(actor_hidden_units[:-1], actor_hidden_units[1:]):
             actor_intermediary_layers.append(nn.Linear(hidden_last, hidden))
@@ -23,7 +23,8 @@ class ActorCritic(nn.Module):
             nn.Tanh()
         )
 
-        self.critic = getattr(policies.critics, critic)(state_dim, action_dim, critic_hidden_units)
+        logging.warning('using critic {}'.format(critic_name))
+        self.critic = getattr(policies.critics, critic_name)(state_dim, action_dim, critic_hidden_units)
 
     def forward(self):
         raise NotImplementedError
