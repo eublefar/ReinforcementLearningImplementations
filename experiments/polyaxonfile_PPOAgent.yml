@@ -63,25 +63,25 @@ environment:
 
 
 run:
-  cmd: python -u train.py {{ "--render-env" if render_env == true}} \
-                          {{ "--use-monitor" if use_monitor == true}}\
-                          {{ "--cuda" if cuda == 'True'}}\
-                          --env={{ env }}\
-                          --agent={{ agent }}\
-                          --agent-module={{ agent_module }}
-                          --random-seed={{ random_seed }}\
-                          --max-episodes={{ max_episodes }}\
-                          --max-episode-len={{ max_episode_len }}\
-                          --random-episodes={{ random_episode_num }}\
-                          --log-dir={{ log_dir }}\
-                          --lr={{ lr }}\
-                          --gamma={{ gamma }}\
-                          --batch-size={{ batch_size }}\
-                          --epsilon={{ epsilon }}\
-                          --epochs={{ epochs }}\
-                          --action-std={{ action_std }}\
-                          --model-dir={{ model_dir }}\
-                          --latent={{ latent }}
-                          --monitor-dir=polyaxon
-                          --lam={{ lam }}
-                          --sampler={{ sampler }}
+  cmd: python -u train.py \
+    "--use-monitor" \
+    --env="Pendulum-v0" \
+    --agent=PPOAgent \
+    --agent-module=agents.PPOAgent.PPOAgent \
+    --random-seed=1024 \
+    --max-episodes=50000 \
+    --max-episode-len=3000 \
+    --random-episodes=0 \
+    --log-dir="./results1" \
+    --actor-lr=0.001 \
+    --critic-lr=0.01 \
+    --gamma=0.9 \
+    --lam=0.9 \
+    --buffer-size=5000000 \
+    --batch-size=3 \
+    --model-dir="./results1/model" \
+    --monitor-dir="./results1/monitor" \
+    --sampler=GaussianSampler \
+    --std=0.2 \
+    --epochs=15 \
+    --checkpoint-steps=100
