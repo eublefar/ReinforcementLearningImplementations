@@ -41,17 +41,9 @@ class OrnsteinUhlenbeckSampler(BaseSampler):
                                                               ))).log_prob(x)
             self.x_prev = x
             logprobs.append(logprob)
-
-        return actions, torch.stack(logprobs)
-
-    def get_entropy(self, actions):
-        # Warning OrnsteinUhlenbeckSampler.get_entropy() method has a lot of bias.
-        # Since no X state available for process we pick most probable mean - actions.
-        dist = torch.distributions.MultivariateNormal(actions,
-                                                      torch.diag(torch.abs(
-                                                          self.sigma * np.sqrt(self.dt) * torch.ones(actions.shape[1:])
-                                                      )))
-        return dist.entropy()
+        action_logprobs = torch.stack(logprobs)
+        entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
+        return actions, action_logprobs
 
     def get_logprobs(self, action_means, sampled_actions):
         # Warning OrnsteinUhlenbeckSampler.get_logprobs() method has a lot of bias.
@@ -61,7 +53,9 @@ class OrnsteinUhlenbeckSampler(BaseSampler):
                                                           self.sigma * np.sqrt(self.dt) * torch.ones(
                                                               action_means.shape[1:])
                                                       )))
-        return dist.log_prob(sampled_actions)
+        action_logprobs = dist.log_prob(sampled_actions)
+        entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
+        return action_logprobs, entropy
 
     def get_variances(self, actions):
         raise NotImplementedError
