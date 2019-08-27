@@ -16,24 +16,17 @@ class AdaptiveGaussianSampler(BaseSampler):
         dist = torch.distributions.MultivariateNormal(action_mean, covariance)
         action = dist.sample()
         action_logprobs = dist.log_prob(action)
-
         return action, action_logprobs
-
-    def get_entropy(self, actions):
-        action_var = actions[:, actions.shape[1] // 2:]
-        action_mean = actions[:, :actions.shape[1] // 2]
-        covariance = matrix_diag(action_var)
-        logging.info('Sampler covariance matrix: '.format(covariance))
-        dist = torch.distributions.MultivariateNormal(action_mean, covariance)
-        return dist.entropy()
 
     def get_logprobs(self, actions, samples):
         action_var = actions[:, actions.shape[1] // 2:]
         action_mean = actions[:, :actions.shape[1] // 2]
 
         dist = torch.distributions.MultivariateNormal(action_mean, matrix_diag(action_var))
+        action_logprobs = dist.log_prob(samples)
+        entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
 
-        return dist.log_prob(samples)
+        return dist.log_prob(samples), entropy
 
     def get_variances(self, actions):
         return actions[:, actions.shape[1] // 2:]

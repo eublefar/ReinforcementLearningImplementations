@@ -23,16 +23,13 @@ class GaussianSampler(BaseSampler):
         action_logprobs = dist.log_prob(action)
         return actions, action_logprobs
 
-    def get_entropy(self, actions):
-        action_var = torch.full(actions.shape[1:], self.std * self.std).to(device)
-        dist = torch.distributions.MultivariateNormal(actions, torch.diag(torch.abs(action_var)))
-        return dist.entropy()
-
     def get_logprobs(self, actions, samples):
         action_var = torch.full(actions.shape[1:], self.std * self.std).to(device)
         dist = torch.distributions.MultivariateNormal(actions, torch.diag(torch.abs(action_var)))
+        action_logprobs = dist.log_prob(samples)
+        entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
 
-        return dist.log_prob(samples)
+        return action_logprobs, entropy
 
     def get_variances(self, actions):
         return torch.full(actions.shape[1:], self.std * self.std).to(device)

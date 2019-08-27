@@ -35,10 +35,10 @@ class ActorCritic(nn.Module):
         return self.critic(*args)
 
     def evaluate(self, state):
-        logging.info('evaluating state {}'.format(state))
+        # logging.info('evaluating state {}'.format(state))
 
         new_actions = self.actor(state)
         state_value = self.critic(state, new_actions)
 
-        logging.info('state_value {}'.format(state_value))
+        # logging.info('state_value {}'.format(state_value))
         return torch.squeeze(state_value), new_actions

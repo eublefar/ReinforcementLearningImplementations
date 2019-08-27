@@ -18,10 +18,6 @@ class BaseSampler(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_entropy(self, action):
-        raise NotImplementedError()
-
-    @abstractmethod
     def get_logprobs(self, actions, samples):
         raise NotImplementedError()
 

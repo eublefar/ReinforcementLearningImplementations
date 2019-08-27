@@ -44,8 +44,8 @@ class PPOAgent:
         parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
         parser.add_argument('--batch-size', help='size of update memory', default=100, type=int)
         parser.add_argument('--epochs', help='epochs to update per step', default=5, type=int)
-        parser.add_argument('--actor_hidden_units', help='Size of a hidden layers', default=[128], nargs='+', type=int)
-        parser.add_argument('--critic_hidden_units', help='Size of a hidden layers', default=[128], nargs='+', type=int)
+        parser.add_argument('--actor_hidden_units', help='Size of a hidden layers', default=[256], nargs='+', type=int)
+        parser.add_argument('--critic_hidden_units', help='Size of a hidden layers', default=[256], nargs='+', type=int)
         parser.add_argument('--epsilon', help='clip objective threshold', default=0.2, type=float)
         parser.add_argument('--lam', help='Gae lambda parameter', default=0.5, type=float)
         parser.add_argument('--model-dir', help='directory for storing gym results', default='./saved_models')
@@ -141,10 +141,10 @@ class PPOAgent:
             if episode % self.args.batch_size == 0 and episode:
                 self.memory = [self.process_episode(e) for e in self.memory]
                 example_episode = self.memory[0]
-                logging.info('''
-                    example episode states {},
-                    example episode actions {} 
-                '''.format(example_episode.states, example_episode.actions))
+                # logging.info('''
+                #     example episode states {},
+                #     example episode actions {}
+                # '''.format(example_episode.states, example_episode.actions))
                 self.fit_batch(episode)
                 self.memory = []
             self.memory.append(Episode())
@@ -155,7 +155,7 @@ class PPOAgent:
             self.total_actor_loss = 0
             self.total_critic_loss = 0
             self.total_entropy_loss = 0
-            logging.info('Memory length'.format(len(self.memory)))
+            # logging.info('Memory length {}'.format(len(self.memory)))
             self.last_variance = None
             for i, episode in enumerate(self.memory):
                 if episode.states.ndim == 0:
@@ -173,11 +173,11 @@ class PPOAgent:
 
             self.optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm(self.policy.critic.parameters(), 60)
+            torch.nn.utils.clip_grad_norm(self.policy.critic.parameters(), 40)
             self.optimizer.step()
 
             self.last_variance /= len(self.memory)
-            self.add_summary(epoch * len(self.memory))
+            self.add_summary((ep//len(self.memory)) *self.args.epochs * len(self.memory) + epoch)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
     def add_summary(self, step):
@@ -211,7 +211,10 @@ class PPOAgent:
         e.coefs = coefs_tri
 
         e.rewards = torch.FloatTensor(e.rewards).to(device)
+        logging.debug('rewards {}'.format(e.rewards.shape))
+        logging.debug('gammas triangular {}'.format(gammas_tri))
         returns = gammas_tri.matmul(e.rewards)
+        logging.debug('returns {}'.format(returns.shape))
         e.returns = returns
 
         e.logprobs = torch.cat(e.logprobs).detach()
@@ -221,19 +224,21 @@ class PPOAgent:
 
     def learn_episode(self, episode):
         state_values, new_actions = self.policy.evaluate(episode.states)
-        logging.info('Learning state values {}, sampled vs new actions: {} vs {}'
-                         .format(state_values, episode.actions, new_actions))
-        logprobs = self.policy_sampler.get_logprobs(actions=new_actions, samples=episode.actions)
-        entropy = self.policy_sampler.get_entropy(new_actions)
+        # logging.info('Learning state values {}, sampled vs new actions: {} vs {}'
+        #                  .format(state_values, episode.actions, new_actions))
+        logprobs, entropy = self.policy_sampler.get_logprobs(actions=new_actions, samples=episode.actions)
         last_variances = self.policy_sampler.get_variances(new_actions)
 
+        logging.debug('returns size processed episodes {} '.format(episode.returns))
+        episode.returns = episode.returns/torch.norm(episode.returns)
         next_state_values = torch.cat((state_values[1:], torch.zeros(1).to(device)))
         targets = episode.returns
-        td_residuals = episode.rewards + next_state_values * self.args.gamma - state_values
+        # td_residuals = episode.rewards + next_state_values * self.args.gamma - state_values
 
-        advantages = episode.coefs.matmul(td_residuals)
-        # advantages = returns - state_values #+ next_state_value.squeeze() * terminal[-1]
-        advantages = torch.norm(advantages)
+        logging.debug('targets size processed episodes {} '.format(episode.returns))
+        # advantages = episode.coefs.matmul(td_residuals)
+        advantages = episode.returns - state_values #+ next_state_value.squeeze() * terminal[-1]
+        # advantages = torch.norm(advantages)
 
         ratios = torch.exp(logprobs - episode.logprobs)
 
@@ -243,8 +248,8 @@ class PPOAgent:
         # critic_loss = (0.5 * td_residuals + 0.5 * self.loss(targets, state_values)).mean()
         critic_loss = self.loss(targets, state_values).mean()
 
-        entropy_loss = - entropy.mean()
-
+        # entropy_loss = - entropy.mean()
+        entropy_loss = torch.zeros(1)
         return actor_loss, critic_loss, entropy_loss, last_variances
 
     def save(self, identity):
