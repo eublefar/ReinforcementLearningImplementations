@@ -1,7 +1,7 @@
 # ReinforcementLearningImplementations
 DDPG and PPO RL agents implemented in Pytorch.   
-Experiments are tracked using Polyaxon framework hence usage is defined in polyaxonfiles (simple YAML definitions)   
-Usage example:  
+Experiments are tracked using Polyaxon framework and usage is defined in polyaxonfiles (simple YAML definitions)   
+CLI usage example:  
 bash
 ```bash
 python -u train.py \
