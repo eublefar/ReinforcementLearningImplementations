@@ -1,6 +1,7 @@
 from .ActorCriticPolicy import ActorCritic
 from .TargetNetworkTwin import TargetNetworkTwin
 import torch
+import logging
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -11,6 +12,7 @@ class ActorCriticWithTarget(ActorCritic):
         raise NotImplementedError
 
     def __init__(self, *args, tau=0.00001, **kwargs):
+        logging.warning('args {}\n kwargs {}'.format(args, kwargs))
         super(ActorCriticWithTarget, self).__init__(*args, **kwargs)
         self.actor = TargetNetworkTwin(self.actor, tau=tau)
         self.critic = TargetNetworkTwin(self.critic, tau=tau)

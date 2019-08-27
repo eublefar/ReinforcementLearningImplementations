@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+from ..BaseAgent import BaseAgent
 from argparse import ArgumentParser
 from policies.ActorCriticPolicy import ActorCritic
 from pathlib import Path
@@ -7,12 +8,6 @@ import os
 import importlib
 import logging
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-# TODO:
-#  - Add common buffer class with samplers
-#  - Add module superclass that will parse parameters it needs
 
 
 class Episode:
@@ -31,56 +26,43 @@ def build_triangle_matrix(v):
     return tri
 
 
-class PPOAgent:
-    def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
-
-        self.summary_writer = summary_writer
-
-        parser = ArgumentParser(description='PPO')
+class PPOAgent(BaseAgent):
+    
+    def add_arguments(self, parser):
         parser.add_argument('--dkl-penalty', help='Use penalty instead of surrogate objective clipping',
                             action='store_true')
-        parser.add_argument('--sampler', help='Sampler class name to use for exploration and learning', type=str)
         parser.add_argument('--lr', help='actor network learning rate', default=0.0001, type=float)
         parser.add_argument('--gamma', help='discount factor for critic updates', default=0.99, type=float)
         parser.add_argument('--batch-size', help='size of update memory', default=100, type=int)
         parser.add_argument('--epochs', help='epochs to update per step', default=5, type=int)
-        parser.add_argument('--actor_hidden_units', help='Size of a hidden layers', default=[256], nargs='+', type=int)
-        parser.add_argument('--critic_hidden_units', help='Size of a hidden layers', default=[256], nargs='+', type=int)
+        parser.add_argument('--actor_hidden_units', help='Size of a hidden layers', default=[256, 128], nargs='+', type=int)
+        parser.add_argument('--critic_hidden_units', help='Size of a hidden layers', default=[256, 128], nargs='+', type=int)
         parser.add_argument('--epsilon', help='clip objective threshold', default=0.2, type=float)
         parser.add_argument('--lam', help='Gae lambda parameter', default=0.5, type=float)
         parser.add_argument('--model-dir', help='directory for storing gym results', default='./saved_models')
         parser.add_argument('--cuda', help='Enable gpu optimization', action='store_true')
-
-        self.args, _ = parser.parse_known_args(args_for_parse)
-        print(f'Parsed model parameters {self.args}')
+        return parser
+    
+    def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
+        super(PPOAgent, self).__init__(observation_space, action_space, args_for_parse, summary_writer=None)
+        self.summary_writer = summary_writer
 
         if self.args.model_dir == 'polyaxon':
             from polyaxon_helper import get_outputs_path
             self.args.model_dir = get_outputs_path()
 
-        self.stats = self.get_state_distr_stats(observation_space)
-
         self.gamma = self.args.gamma
         self.action_dim = action_space.shape[0]
         self.state_dim = observation_space.shape[0]
-        self.critic_update_weight = 0.7
+        self.critic_update_weight = 0.5
         self.entropy_update_weight = 0.01
-
-        if any(action_space.high != -action_space.low):
-            raise ValueError(f"Env action space is not symmetric. high :{action_space.high} low: {action_space.low}")
-
-        self.action_scale = action_space.high[0]
-
-        self.policy_sampler = getattr(
-            importlib.import_module('policy_samplers.{}'.format(self.args.sampler)),
-            self.args.sampler)(args_for_parse)
 
         self.policy = ActorCritic(self.state_dim,
                                   self.policy_sampler.get_layer_size_before_sample(self.action_dim),
-                                  self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
+                                  self.args.actor_hidden_units, self.args.critic_hidden_units).to(self.args.device)
         self.policy_old = ActorCritic(self.state_dim,
                                       self.policy_sampler.get_layer_size_before_sample(self.action_dim),
-                                      self.args.actor_hidden_units, self.args.critic_hidden_units).to(device)
+                                      self.args.actor_hidden_units, self.args.critic_hidden_units).to(self.args.device)
 
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=self.args.lr)
         self.loss = nn.MSELoss(reduce=False)
@@ -94,43 +76,18 @@ class PPOAgent:
         self.total_critic_loss = 0
         self.total_entropy_loss = 0
 
-    def get_state_distr_stats(self, state_dim):
-        stat_dicts = []
-        for i in range(len(state_dim.high)):
-            high = state_dim.high[i]
-            low = state_dim.low[i]
-            mean = (high + low)/2
-            std = (high - low)/2
-            stat_dicts.append(
-                {
-                    'mean': mean,
-                    'std': std
-                }
-            )
-        return stat_dicts
-
-    def normalize_states(self, states):
-        for i in range(states.shape[1]):
-            std = self.stats[i]['std']
-            mean = self.stats[i]['mean']
-            states[:, i] = (states[:, i] - mean)/std
-        return states
-
-    def act(self, state, episode):
+    def _act_normalized(self, state, episode):
         self.policy_old.eval()
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
-        state = self.normalize_states(state)
         action = self.policy_old.act(state)
         action_sampled, logprob = self.policy_sampler.sample_action(action)
         self.memory[-1].states.append(state)
         self.memory[-1].logprobs.append(logprob)
         self.memory[-1].actions.append(action_sampled)
         self.policy_old.train()
-        extracted_action = action_sampled.cpu().data.numpy().flatten()
-        # logging.info('acting on {} with {}'.format(state, action))
-        return extracted_action * self.action_scale
+        logging.info('acting on {} with {}'.format(state, action))
+        return action_sampled
 
-    def memorize(self, s, a, r, terminal, s_prim):
+    def _memorize_normalized(self, s, a, r, terminal, s_prim):
         self.memory[-1].rewards.append(r)
         if terminal:
             # self.memory[-1].states.append(torch.FloatTensor(s_prim.reshape(1, -1)).to(device))
@@ -205,12 +162,12 @@ class PPOAgent:
         lambdas = torch.FloatTensor(lambdas)
         gammas = torch.FloatTensor(gammas)
         coefs = gammas * lambdas
-        coefs_tri = build_triangle_matrix(coefs).to(device)
-        gammas_tri = build_triangle_matrix(gammas).to(device)
+        coefs_tri = build_triangle_matrix(coefs).to(self.args.device)
+        gammas_tri = build_triangle_matrix(gammas).to(self.args.device)
 
         e.coefs = coefs_tri
 
-        e.rewards = torch.FloatTensor(e.rewards).to(device)
+        e.rewards = torch.FloatTensor(e.rewards).to(self.args.device)
         logging.debug('rewards {}'.format(e.rewards.shape))
         logging.debug('gammas triangular {}'.format(gammas_tri))
         returns = gammas_tri.matmul(e.rewards)
@@ -231,30 +188,26 @@ class PPOAgent:
 
         logging.debug('returns size processed episodes {} '.format(episode.returns))
         episode.returns = episode.returns/torch.norm(episode.returns)
-        next_state_values = torch.cat((state_values[1:], torch.zeros(1).to(device)))
-        targets = episode.returns
+        next_state_values = torch.cat((state_values[1:], torch.zeros(1).to(self.args.device)))
+        targets = episode.returns/torch.norm(episode.returns)
         # td_residuals = episode.rewards + next_state_values * self.args.gamma - state_values
 
         logging.debug('targets size processed episodes {} '.format(episode.returns))
         # advantages = episode.coefs.matmul(td_residuals)
-        advantages = episode.returns - state_values #+ next_state_value.squeeze() * terminal[-1]
+        advantages = episode.returns - state_values.detach() #+ next_state_value.squeeze() * terminal[-1]
         # advantages = torch.norm(advantages)
 
         ratios = torch.exp(logprobs - episode.logprobs)
 
         surrogate = ratios * advantages
         surrogate_clipped = torch.clamp(ratios, 1 - self.args.epsilon, 1 + self.args.epsilon) * advantages
-        actor_loss = - (torch.min(surrogate, surrogate_clipped)).mean()
+        actor_loss = - (torch.min(surrogate, surrogate_clipped)).sum()
         # critic_loss = (0.5 * td_residuals + 0.5 * self.loss(targets, state_values)).mean()
-        critic_loss = self.loss(targets, state_values).mean()
+        critic_loss = self.loss(targets.detach(), state_values).sum()
 
         # entropy_loss = - entropy.mean()
         entropy_loss = torch.zeros(1)
         return actor_loss, critic_loss, entropy_loss, last_variances
 
-    def save(self, identity):
-        path = Path(f'{self.args.model_dir}/{identity}')
-        if path.exists():
-            os.system(f'rm -rf {path}')
-        path.mkdir(parents=True)
-        torch.save(self.policy.state_dict(), f'{str(path)}/actor')
+    def state_dict(self):
+        return self.policy.state_dict()

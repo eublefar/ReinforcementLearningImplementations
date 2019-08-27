@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 import logging
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 class GaussianSampler(BaseSampler):
@@ -17,14 +17,14 @@ class GaussianSampler(BaseSampler):
         self.action_shape = None
 
     def sample_action(self, actions):
-        action_var = torch.full(actions.shape[1:], self.std * self.std).to(device)
+        action_var = torch.full(actions.shape[1:], self.std * self.std).to('cpu')
         dist = torch.distributions.MultivariateNormal(actions, torch.diag(torch.abs(action_var)))
         action = dist.sample()
         action_logprobs = dist.log_prob(action)
-        return actions, action_logprobs
+        return action, action_logprobs
 
     def get_logprobs(self, actions, samples):
-        action_var = torch.full(actions.shape[1:], self.std * self.std).to(device)
+        action_var = torch.full(actions.shape[1:], self.std * self.std).to('cpu')
         dist = torch.distributions.MultivariateNormal(actions, torch.diag(torch.abs(action_var)))
         action_logprobs = dist.log_prob(samples)
         entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
