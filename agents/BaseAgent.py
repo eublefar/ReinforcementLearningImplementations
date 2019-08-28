@@ -21,8 +21,6 @@ class BaseAgent(ABC):
         self.action_high = action_space.high
         self.action_low = action_space.low
 
-        print(self.action_high)
-
         if any(action_space.high != -action_space.low):
             raise ValueError(f"Env action space is not symmetric. high :{action_space.high} low: {action_space.low}")
 
@@ -59,14 +57,22 @@ class BaseAgent(ABC):
         for i in range(len(state_dim.high)):
             high = state_dim.high[i]
             low = state_dim.low[i]
-            mean = (high + low)/2
-            std = (high - low)/2
-            stat_dicts.append(
-                {
-                    'mean': mean,
-                    'std': std
-                }
-            )
+            if high == float('inf') and low == float('-inf'):
+                stat_dicts.append(
+                    {
+                        'mean': 0,
+                        'std': 1
+                    }
+                )
+            else:
+                mean = (high + low)/2
+                std = (high - low)/2
+                stat_dicts.append(
+                    {
+                        'mean': mean,
+                        'std': std
+                    }
+                )
         return stat_dicts
 
     def normalize_states(self, states, stats):

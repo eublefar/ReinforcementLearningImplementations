@@ -6,26 +6,25 @@ bash
 ```bash
 python -u train.py \
                    "--use-monitor" \
-                   --env="Pendulum-v0" \
+                   --device=cpu  \
+                   --env="BipedalWalker-v2" \
                    --agent=PPOAgent \
                    --agent-module=agents.PPOAgent.PPOAgent \
                    --random-seed=1024 \
                    --max-episodes=50000 \
                    --max-episode-len=3000 \
                    --random-episodes=0 \
-                   --log-dir="./results1" \
-                   --actor-lr=0.001 \
-                   --critic-lr=0.004 \
-                   --gamma=0.9 \
+                   --log-dir="./results2" \
+                   --lr=0.01 \
+                   --gamma=0.99 \
                    --lam=0.9 \
                    --buffer-size=5000000 \
-                   --batch-size=4 \
+                   --batch-size=8 \
                    --model-dir="./results1/model" \
                    --monitor-dir="./results1/monitor" \
-                   --sampler=GaussianSampler \
+                   --sampler=AdaptiveGaussianSampler \
                    --std=0.6 \
-                   --epochs=1 \
-                   --checkpoint-steps=100
+                   --epochs=20
 ```
 
 cmd
