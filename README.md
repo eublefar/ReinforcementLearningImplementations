@@ -31,24 +31,37 @@ cmd
 ```
 python -u train.py ^
                    "--use-monitor" ^
-                   --device=cpu  ^
+                   --device=cuda  ^
                    --env="LunarLanderContinuous-v2" ^
-                   --agent=PPOAgent ^
-                   --agent-module=agents.PPOAgent.PPOAgent ^
+                   --agent=DDPGAgent ^
+                   --agent-module=agents.DDPGAgent.DDPGAgent ^
                    --random-seed=1024 ^
                    --max-episodes=50000 ^
                    --max-episode-len=3000 ^
-                   --random-episodes=0 ^
-                   --log-dir="./results1" ^
-                   --lr=0.01 ^
+                   --random-episodes=200 ^
+                   --log-dir="./results2" ^
+                   --lr=0.001 ^
                    --gamma=0.99 ^
                    --lam=0.9 ^
                    --buffer-size=5000000 ^
-                   --batch-size=8 ^
-                   --model-dir="./results1/model" ^
-                   --monitor-dir="./results1/monitor" ^
+                   --minibatch-size=32 ^
+                   --model-dir="./results2/model" ^
+                   --monitor-dir="./results2/monitor" ^
                    --sampler=AdaptiveGaussianSampler ^
                    --std=0.6 ^
                    --epochs=20
                    
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+

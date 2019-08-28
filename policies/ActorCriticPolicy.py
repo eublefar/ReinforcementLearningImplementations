@@ -2,6 +2,8 @@ from torch import nn
 import torch
 import policies.critics
 import logging
+from itertools import chain
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -43,3 +45,11 @@ class ActorCritic(nn.Module):
 
         # logging.info('state_value {}'.format(state_value))
         return torch.squeeze(state_value), new_actions
+
+    def parameters(self, recurse: bool = ...):
+        return chain(self.actor.parameters(recurse), self.critic.parameters(recurse))
+
+    def state_dict(self, destination, prefix: str = ..., keep_vars: bool = ...):
+        return {**self.actor.state_dict(),
+                **self.critic.state_dict()}
+

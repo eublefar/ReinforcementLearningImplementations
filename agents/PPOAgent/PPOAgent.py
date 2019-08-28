@@ -44,7 +44,7 @@ class PPOAgent(BaseAgent):
         return parser
     
     def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
-        super(PPOAgent, self).__init__(observation_space, action_space, args_for_parse, summary_writer=None)
+        super(PPOAgent, self).__init__(observation_space, action_space, args_for_parse, summary_writer)
         self.summary_writer = summary_writer
 
         if self.args.model_dir == 'polyaxon':
@@ -113,7 +113,6 @@ class PPOAgent(BaseAgent):
             self.total_critic_loss = 0
             self.total_entropy_loss = 0
             # logging.info('Memory length {}'.format(len(self.memory)))
-            self.last_variance = None
             for i, episode in enumerate(self.memory):
                 if episode.states.ndim == 0:
                     continue
@@ -121,8 +120,6 @@ class PPOAgent(BaseAgent):
                 self.total_actor_loss += actor_loss
                 self.total_critic_loss += critic_loss
                 self.total_entropy_loss += entropy_loss
-                self.last_variance = self.last_variance + last_variance.mean() if self.last_variance is not None \
-                    else last_variance.mean()
             loss = (self.total_actor_loss
                     + self.total_critic_loss * self.critic_update_weight
                     + self.total_entropy_loss * self.entropy_update_weight)
@@ -133,7 +130,6 @@ class PPOAgent(BaseAgent):
             torch.nn.utils.clip_grad_norm(self.policy.critic.parameters(), 40)
             self.optimizer.step()
 
-            self.last_variance /= len(self.memory)
             self.add_summary((ep//len(self.memory)) *self.args.epochs * len(self.memory) + epoch)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
@@ -154,7 +150,6 @@ class PPOAgent(BaseAgent):
                                        sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()]) ** (
                                                1. / 2), global_step=step)
 
-        self.summary_writer.add_histogram('action_var', self.last_variance, global_step=step)
 
     def process_episode(self, e):
         lambdas = [self.args.lam ** i for i in range(len(e.rewards))]

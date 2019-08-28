@@ -14,6 +14,8 @@ class BaseAgent(ABC):
         raise NotImplementedError()
 
     def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
+        self.summary_writer = summary_writer
+        self.global_step = 0
 
         self.action_space = action_space
         self.observation_space = observation_space
@@ -83,6 +85,7 @@ class BaseAgent(ABC):
         return states
 
     def act(self, state, episode):
+        self.global_step += 1
         state = torch.FloatTensor(state.reshape(1, -1)).to(self.args.device)
         state = self.normalize_states(state, self.stats)
         action_sampled = self._act_normalized(state, episode) * self.action_scale
@@ -102,6 +105,9 @@ class BaseAgent(ABC):
         self._memorize_normalized(s, a, r, terminal, s_prim)
 
     def add_variance(self, action):
+        self.summary_writer.add_histogram('action_var',
+                                          self.policy_sampler.get_variances(action),
+                                          global_step=self.global_step)
         return self.policy_sampler.sample_action(action)
 
     @abstractmethod

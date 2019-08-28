@@ -32,3 +32,5 @@ class ActorCriticWithTarget(ActorCritic):
         state_value = self.critic.forward_target(state, new_actions)
 
         return torch.squeeze(state_value), new_actions
+
+

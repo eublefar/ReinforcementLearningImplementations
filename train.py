@@ -42,7 +42,7 @@ def main(args):
 
 def train(args, agent, writer, env):
     # random loop
-    logging.info('Running random episodes {} times'.format(args.random_episodes))
+    print('Running random episodes {} times'.format(args.random_episodes))
     for i in range(args.random_episodes):
         ob = env.reset()
         for _ in range(args.max_episode_len):
