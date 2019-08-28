@@ -96,7 +96,7 @@ def step_policy(env, agent, last_ob, episode_num):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=None)
-    logging.basicConfig(level = logging.INFO)
+    logging.basicConfig(level=logging.ERROR)
     # run parameters
 
     parser.add_argument('--use-monitor', help='record gym results', action='store_true')
