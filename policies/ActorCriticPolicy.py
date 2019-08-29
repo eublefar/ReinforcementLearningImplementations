@@ -49,7 +49,7 @@ class ActorCritic(nn.Module):
     def parameters(self, recurse: bool = ...):
         return chain(self.actor.parameters(recurse), self.critic.parameters(recurse))
 
-    def state_dict(self, destination, prefix: str = ..., keep_vars: bool = ...):
-        return {**self.actor.state_dict(),
-                **self.critic.state_dict()}
+    def state_dict(self, destination=None, prefix: str = ..., keep_vars: bool = ...):
+        return {**self.actor.state_dict(prefix='actor.'),
+                **self.critic.state_dict(prefix='critic.')}
 

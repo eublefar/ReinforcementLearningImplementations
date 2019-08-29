@@ -1,13 +1,9 @@
 from torch import nn
 import torch
 from ..BaseAgent import BaseAgent
-from argparse import ArgumentParser
 from policies.ActorCriticPolicy import ActorCritic
-from pathlib import Path
-import os
-import importlib
 import logging
-
+import math
 
 
 class Episode:
@@ -25,6 +21,8 @@ def build_triangle_matrix(v):
         v = v[:-1]
     return tri
 
+
+#TODO: dkl-penalty, GAE
 
 class PPOAgent(BaseAgent):
     
@@ -76,32 +74,31 @@ class PPOAgent(BaseAgent):
         self.total_critic_loss = 0
         self.total_entropy_loss = 0
 
+        self.last_logprobs = None
+
     def _act_normalized(self, state, episode):
-        self.policy_old.eval()
         action = self.policy_old.act(state)
-        action_sampled, logprob = self.policy_sampler.sample_action(action)
-        self.memory[-1].states.append(state)
-        self.memory[-1].logprobs.append(logprob)
-        self.memory[-1].actions.append(action_sampled)
-        self.policy_old.train()
-        logging.info('acting on {} with {}'.format(state, action))
+        action_sampled, logprob = self.add_variance(action)
+        self.last_logprobs = logprob
+        logging.debug('acting on {} with {}'.format(state, action))
         return action_sampled
 
     def _memorize_normalized(self, s, a, r, terminal, s_prim):
         self.memory[-1].rewards.append(r)
+        self.memory[-1].states.append(s)
+        # Sampling occurs from uniform distribution during random episodes
+        logprobs = self.last_logprobs.to(self.args.device) if self.last_logprobs is not None \
+                                         else torch.full((a.shape[0],), 1/2).to(self.args.device)
+        # print('logprobs {}'.format(logprobs))
+        self.memory[-1].logprobs.append(logprobs)
+        self.memory[-1].actions.append(a)
         if terminal:
-            # self.memory[-1].states.append(torch.FloatTensor(s_prim.reshape(1, -1)).to(device))
             self.new_episode = True
 
     def update(self, episode=0):
         if self.new_episode:
             if episode % self.args.batch_size == 0 and episode:
                 self.memory = [self.process_episode(e) for e in self.memory]
-                example_episode = self.memory[0]
-                # logging.info('''
-                #     example episode states {},
-                #     example episode actions {}
-                # '''.format(example_episode.states, example_episode.actions))
                 self.fit_batch(episode)
                 self.memory = []
             self.memory.append(Episode())

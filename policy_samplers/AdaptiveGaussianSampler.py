@@ -29,7 +29,7 @@ class AdaptiveGaussianSampler(BaseSampler):
         action_logprobs = dist.log_prob(samples)
         entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
 
-        return dist.log_prob(samples), entropy
+        return action_logprobs, entropy
 
     def get_variances(self, actions):
         return actions[:, actions.shape[1] // 2:]

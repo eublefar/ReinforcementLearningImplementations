@@ -1,8 +1,6 @@
 import torch
 from .base_sampler import BaseSampler
 from argparse import ArgumentParser
-import logging
-
 
 
 class GaussianSampler(BaseSampler):
