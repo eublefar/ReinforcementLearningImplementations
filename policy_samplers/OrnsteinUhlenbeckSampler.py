@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from argparse import ArgumentParser
 from .base_sampler import BaseSampler
-device = torch.device("cpu")
+device = torch.device("cuda")
 
 
 class OrnsteinUhlenbeckSampler(BaseSampler):
@@ -16,6 +16,7 @@ class OrnsteinUhlenbeckSampler(BaseSampler):
         parser.add_argument('--theta', type=float, default=.15)
         parser.add_argument('--sigma', type=float, default=.2)
         parser.add_argument('--dt', type=float, default=.01)
+        parser.add_argument('--device', type=str, default='cpu')
         self.args, _ = parser.parse_known_args(args_for_parse)
         self.theta = self.args.theta
         self.mu = self.args.mu
@@ -28,16 +29,17 @@ class OrnsteinUhlenbeckSampler(BaseSampler):
     # TODO: Implement stepping per batch sample and calculating logprobs with multiple x's
     def sample_action(self, actions):
         if self.x_prev is None:
-            self.x_prev = torch.zeros_like(actions[0])
+            self.x_prev = torch.zeros_like(actions[0]).to(self.args.device)
         n_steps = actions.shape[0]
         logprobs = []
         for step in range(n_steps):
-            x = self.x_prev + self.theta * (self.mu * torch.ones_like(self.x_prev) - self.x_prev) * self.dt + \
-                self.sigma * np.sqrt(self.dt) * torch.FloatTensor(np.random.normal(size=actions.shape[1:]))
+            x = self.x_prev + self.theta * (self.mu * torch.ones_like(self.x_prev, device=self.args.device) - self.x_prev) * self.dt + \
+                self.sigma * np.sqrt(self.dt) * \
+                torch.randn(size=actions.shape[1:], dtype=torch.float32).to(self.args.device)
             actions[step, :] += x
-            logprob = torch.distributions.MultivariateNormal(self.x_prev + self.theta * (self.mu * torch.ones_like(self.x_prev) - self.x_prev) * self.dt,
+            logprob = torch.distributions.MultivariateNormal(self.x_prev + self.theta * (self.mu * torch.ones_like(self.x_prev, device=self.args.device) - self.x_prev) * self.dt,
                                                               torch.diag(torch.abs(
-                                                                  self.sigma * np.sqrt(self.dt) * torch.ones(actions.shape[1:])
+                                                                  self.sigma * np.sqrt(self.dt) * torch.ones(actions.shape[1:], device=self.args.device)
                                                               ))).log_prob(x)
             self.x_prev = x
             logprobs.append(logprob)
@@ -51,14 +53,14 @@ class OrnsteinUhlenbeckSampler(BaseSampler):
         dist = torch.distributions.MultivariateNormal(action_means,
                                                       torch.diag(torch.abs(
                                                           self.sigma * np.sqrt(self.dt) * torch.ones(
-                                                              action_means.shape[1:])
+                                                              action_means.shape[1:], device=self.args.device)
                                                       )))
         action_logprobs = dist.log_prob(sampled_actions)
         entropy = -torch.sum(torch.exp(action_logprobs) * action_logprobs)
         return action_logprobs, entropy
 
     def get_variances(self, actions):
-        raise NotImplementedError
+        return torch.abs(self.sigma * np.sqrt(self.dt) * torch.ones(actions.shape[1:], device=self.args.device))
 
     def __repr__(self):
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)

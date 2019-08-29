@@ -39,15 +39,15 @@ python -u train.py ^
                    --max-episodes=50000 ^
                    --max-episode-len=3000 ^
                    --random-episodes=200 ^
-                   --log-dir="./results2" ^
+                   --log-dir="./results3" ^
                    --lr=0.001 ^
                    --gamma=0.99 ^
                    --lam=0.9 ^
                    --buffer-size=5000000 ^
                    --minibatch-size=32 ^
-                   --model-dir="./results2/model" ^
-                   --monitor-dir="./results2/monitor" ^
-                   --sampler=AdaptiveGaussianSampler ^
+                   --model-dir="./results3/model" ^
+                   --monitor-dir="./results3/monitor" ^
+                   --sampler=GaussianSampler ^
                    --std=0.6 ^
                    --epochs=20
                    

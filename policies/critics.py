@@ -17,6 +17,8 @@ class StateValueCritic(nn.Module):
             *critic_intermediary_layers,
             nn.Linear(hidden_units[-1], 1)
         )
+        self.state_dim = state_dim
+        self.action_dim = action_dim
 
     def forward(self, *args):
         state, action = args
@@ -39,10 +41,13 @@ class ActionValueCritic(nn.Module):
             nn.Linear(hidden_units[-1], 1)
         )
         self.action_dim = action_dim
+        self.state_dim = state_dim
 
     def forward(self, *args):
         if len(args) != 2:
             raise ValueError("ActionValueCritic needs state and action for value predictions")
         state, action = args
-        stateaction = torch.cat((state, action.view(-1, self.action_dim)), 1)
+        state, action = state.squeeze(), action.squeeze()
+
+        stateaction = torch.cat((state.view(-1, self.state_dim), action.view(-1, self.action_dim)), 1)
         return self.critic(stateaction)

@@ -43,10 +43,12 @@ class BaseAgent(ABC):
 
         self.action_scale = torch.FloatTensor(action_space.high.reshape(1, -1)).to(self.args.device)
 
-
         print(f'Parsed Agent parameters {self.args}')
 
     def get_action_size(self):
+        return self.action_space.shape[0]
+
+    def get_action_layer_size(self):
         action_dim = self.action_space.shape[0]
         return self.policy_sampler.get_layer_size_before_sample(action_dim)
 

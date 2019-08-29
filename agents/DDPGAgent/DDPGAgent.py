@@ -24,8 +24,9 @@ class DDPGAgent(BaseAgent):
 
     def __init__(self, observation_space, action_space, args_for_parse, summary_writer=None):
         super(DDPGAgent, self).__init__(observation_space, action_space, args_for_parse, summary_writer)
-        self.policy = ActorCriticWithTarget(self.get_state_size(), self.get_action_size(), self.args.actor_hidden_units,
-                                            self.args.critic_hidden_units, tau=self.args.tau)
+        self.policy = ActorCriticWithTarget(self.get_state_size(), self.get_action_size(),
+                                            self.args.actor_hidden_units, self.args.critic_hidden_units,
+                                            tau=self.args.tau, critic_name='ActionValueCritic')
         self.policy = self.policy.to(self.args.device)
 
         self.replay_buffer = ReplayBuffer(self.args.buffer_size)
@@ -37,14 +38,18 @@ class DDPGAgent(BaseAgent):
         self.critic_losses = []
         self.actor_losses = []
 
+        self.last_action_output = None
+
     def _act_normalized(self, state, episode):
         action_output = self.policy.act(state.to(self.args.device))
         action, logprobs = self.add_variance(action_output)
-
+        self.last_action_output = action_output
         return action.reshape((-1,))
 
     def _memorize_normalized(self, s, a, r, terminal, s_prim):
-        self.replay_buffer.add(s.data.cpu().numpy(), a.data.cpu().numpy(), r, terminal, s_prim)
+        self.replay_buffer.add(s.data.cpu().numpy(),
+                               (self.last_action_output if self.last_action_output is not None
+                                else a).data.cpu().numpy(), r, terminal, s_prim)
 
     def update(self, episode=0):
         s1, a, r, terminal, s2 = self.replay_buffer.sample_batch(self.args.minibatch_size)
@@ -79,11 +84,26 @@ class DDPGAgent(BaseAgent):
 
         self.optimizer.zero_grad()
         loss.backward()
+        self.summary_writer.add_scalar('critic_gradient_norm_criticloss',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.critic.parameters()
+                                            if p.grad is not None]) ** (1. / 2), global_step=self.global_step)
+        self.summary_writer.add_scalar('actor_gradient_norm_criticloss',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()
+                                            if p.grad is not None]) ** (1. / 2), global_step=self.global_step)
+
         self.optimizer.step()
 
         self.optimizer.zero_grad()
         actor_loss.backward()
         self.policy.critic.zero_grad()
+
+        self.summary_writer.add_scalar('critic_gradient_norm_actorloss',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.critic.parameters()
+                                            if p.grad is not None]) ** (1. / 2), global_step=self.global_step)
+        self.summary_writer.add_scalar('actor_gradient_norm_actorloss',
+                                       sum([p.grad.data.norm(2) ** 2 for p in self.policy.actor.parameters()
+                                            if p.grad is not None]) ** (1. / 2), global_step=self.global_step)
+
         self.optimizer.step()
         self.policy.update_target()
 

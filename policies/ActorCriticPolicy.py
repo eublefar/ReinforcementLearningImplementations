@@ -31,8 +31,8 @@ class ActorCritic(nn.Module):
     def forward(self):
         raise NotImplementedError
 
-    def act(self, state):
-        return self.actor(state)
+    def act(self, *args):
+        return self.actor(*args)
 
     def predict(self, *args):
         return self.critic(*args)
